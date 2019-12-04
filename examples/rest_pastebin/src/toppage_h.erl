@@ -15,6 +15,10 @@
 -export([paste_html/2]).
 -export([paste_text/2]).
 
+-export([paste_json/2, create_json/2]).
+
+-define(DEBUG(X), io:format("MOD:~p LINE:~p ~p~n", [?MODULE, ?LINE, X])).
+
 init(Req, Opts) ->
 	{cowboy_rest, Req, Opts}.
 
@@ -24,12 +28,32 @@ allowed_methods(Req, State) ->
 content_types_provided(Req, State) ->
 	{[
 		{{<<"text">>, <<"plain">>, []}, paste_text},
-		{{<<"text">>, <<"html">>, []}, paste_html}
+		{{<<"text">>, <<"html">>, []}, paste_html},
+		{{<<"application">>, <<"json">>, '*'}, paste_json}
 	], Req, State}.
 
 content_types_accepted(Req, State) ->
-	{[{{<<"application">>, <<"x-www-form-urlencoded">>, '*'}, create_paste}],
-		Req, State}.
+	?DEBUG({request, Req}),
+	?DEBUG({state, State}),
+	{[
+		{{<<"application">>, <<"x-www-form-urlencoded">>, '*'}, create_paste},
+		{{<<"application">>, <<"json">>, '*'}, create_json}
+	], Req, State}.
+
+paste_json(Req, State) ->
+	?DEBUG({paste_json, Req, State}),
+	{true, Req, State}.
+
+create_json(Req, State) ->
+	?DEBUG({create_json, Req, State}),
+
+	% example of decoding JSON payload
+	Val = cowboy_req:read_urlencoded_body(Req),
+	?DEBUG(Val),
+
+	% example of adding a response payload
+	Req2 = Req#{resp_body => <<"hi">>},
+	{true, Req2, State}.
 
 resource_exists(Req, _State) ->
 	case cowboy_req:binding(paste_id, Req) of
@@ -45,6 +69,10 @@ resource_exists(Req, _State) ->
 create_paste(Req, State) ->
 	PasteID = new_paste_id(),
 	{ok, [{<<"paste">>, Paste}], Req2} = cowboy_req:read_urlencoded_body(Req),
+	?DEBUG(Paste),
+	?DEBUG(Req),
+	?DEBUG(Req2),
+	?DEBUG(State),
 	ok = file:write_file(full_path(PasteID), Paste),
 	case cowboy_req:method(Req2) of
 		<<"POST">> ->
@@ -54,8 +82,10 @@ create_paste(Req, State) ->
 	end.
 
 paste_html(Req, index) ->
+	?DEBUG({paste_html, index, Req}),
 	{read_file("index.html"), Req, index};
 paste_html(Req, Paste) ->
+	?DEBUG({paste_html, Req, Paste}),
 	#{lang := Lang} = cowboy_req:match_qs([{lang, [fun lang_constraint/2], plain}], Req),
 	{format_html(Paste, Lang), Req, Paste}.
 
